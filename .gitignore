@@ -1,0 +1,20 @@
+# Generated output — never commit
+generated_maps/
+gribs/
+temp/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# macOS
+.DS_Store
+
+# Claude Code local settings
+.claude/

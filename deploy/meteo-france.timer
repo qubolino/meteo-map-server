@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Météo-France forecast pipeline every 6 hours
+Requires=meteo-france.service
+
+[Timer]
+# AROME runs are published at ~0h, 6h, 12h, 18h UTC — offset 30min for availability
+OnCalendar=*-*-* 00,06,12,18:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

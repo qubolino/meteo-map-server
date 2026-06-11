@@ -1,0 +1,12 @@
+[Unit]
+Description=Météo-France forecast map generator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/opt/meteo_france
+ExecStart=/opt/meteo_france/run_all.sh
+StandardOutput=journal
+StandardError=journal

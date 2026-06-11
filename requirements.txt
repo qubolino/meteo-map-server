@@ -1,0 +1,14 @@
+# Direct runtime dependencies
+# System packages required on Raspberry Pi OS (Bookworm) before pip install:
+#   sudo apt install -y libeccodes-dev libgeos-dev libproj-dev proj-data proj-bin
+#                       libhdf5-dev libnetcdf-dev
+
+meteofetch>=0.5.6
+meteole>=0.2.6
+xarray>=2026.4.0
+pandas>=3.0.2
+matplotlib>=3.10.9
+cartopy>=0.25.0
+cfgrib>=0.9.15.1
+eccodes>=2.47.0
+numpy>=2.4.3
