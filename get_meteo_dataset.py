@@ -6,7 +6,9 @@ avoiding duplicate downloads by tracking the latest reference time.
 
 import argparse
 import json
+import re
 from pathlib import Path
+
 import pandas as pd
 from meteofetch import Arome0025
 import xarray
@@ -15,9 +17,19 @@ import config
 
 xarray.set_options(use_new_combine_kwarg_defaults=True)
 
+_WINDOW_RE = re.compile(r"__(\d+)H(\d+)H__")
 
-def get_latest_reference_time(paquet: str) -> pd.Timestamp:
-    return Arome0025.get_latest_forecast_time(paquet=paquet)
+
+def _window_label(file_path: str) -> str:
+    """Extract the window label from a filename, e.g. '07H12H'."""
+    m = _WINDOW_RE.search(file_path)
+    return m.group(0).strip("_") if m else ""
+
+
+def _window_start(file_path: str) -> int:
+    """Extract the start hour from a filename, e.g. 7 from '07H12H'."""
+    m = _WINDOW_RE.search(file_path)
+    return int(m.group(1)) if m else 0
 
 
 def load_cache(path: Path, paquet: str) -> dict:
@@ -34,84 +46,76 @@ def save_cache(path: Path, paquet: str, reference_time: str, file_paths: list):
         json.dump({"latest_reference_time": reference_time, "file_paths": file_paths}, f)
 
 
-def download_latest_forecast(paquet: str, path: Path) -> list:
+def download_latest_forecast(paquet: str, path: Path) -> list[str]:
     """
     Download the latest Arome0025 forecast for the given paquet if not already cached.
-    Returns a list of local file paths.
+    Returns a sorted list of local file paths.
     """
     path.mkdir(parents=True, exist_ok=True)
     cache = load_cache(path, paquet)
 
-    latest_ref_time = get_latest_reference_time(paquet)
+    latest_ref_time = Arome0025.get_latest_forecast_time(paquet=paquet)
     if latest_ref_time is None:
         raise ValueError(f"No forecasts available for paquet '{paquet}'.")
 
     if cache["latest_reference_time"] == latest_ref_time.isoformat():
-        print(f"Already up-to-date (ref: {latest_ref_time}): {cache['file_paths']}")
-        return cache["file_paths"]
+        print(f"[{paquet}] Already up-to-date (ref: {latest_ref_time})")
+        return sorted(cache["file_paths"])
 
-    print(f"Downloading {paquet} (ref: {latest_ref_time})...")
+    print(f"[{paquet}] Downloading (ref: {latest_ref_time})...")
     file_paths = Arome0025.get_latest_forecast(paquet=paquet, path=str(path), return_data=False)
-    file_paths = [str(fp) for fp in file_paths]
+    file_paths = sorted(str(fp) for fp in file_paths)
 
     save_cache(path, paquet, latest_ref_time.isoformat(), file_paths)
-    print(f"Downloaded: {file_paths}")
+    print(f"[{paquet}] Downloaded: {file_paths}")
 
-    # Delete previously cached files
     if cache["file_paths"]:
-        for old_path in cache["file_paths"]:
+        for old in cache["file_paths"]:
             try:
-                Path(old_path).unlink()
-                print(f"Deleted stale file: {old_path}")
+                Path(old).unlink()
+                print(f"[{paquet}] Deleted stale: {old}")
             except FileNotFoundError:
                 pass
             except Exception as e:
-                print(f"Could not delete {old_path}: {e}")
+                print(f"[{paquet}] Could not delete {old}: {e}")
 
     return file_paths
 
 
-def _horizon_start(file_path: str) -> int:
-    """Parse the start hour from a filename like arome__0025__IP1__07H12H__....grib2."""
-    import re
-    m = re.search(r"__(\d+)H\d+H__", file_path)
-    return int(m.group(1)) if m else 0
+def read_file(file_path: str, fields=None) -> xarray.Dataset:
+    """Read a single GRIB file into an xarray Dataset."""
+    return Arome0025._read_multiple_gribs([Path(file_path)], fields, 1)
 
 
-def iter_forecast(paquet: str, path: Path = None, fields=None, hours: int = None):
+def iter_windows(gribs_dir: Path = None, hours: int = None):
     """
-    Yield one xarray.Dataset per GRIB file, in forecast-time order.
-
-    Files whose horizon range starts beyond *hours* are skipped entirely,
-    so we never load data we won't use. Each dataset is read, yielded, and
-    then discarded by the caller — keeping peak memory to one file at a time.
+    Yield (window_label, sp1_file, ip1_file) for each 6h window within the
+    forecast horizon, in time order. Both paquets are downloaded upfront
+    (fast, cached after first run), then paired by window label so the caller
+    can load, render, and discard one window at a time.
     """
-    if path is None:
-        path = config.GRIBS_DIR
+    if gribs_dir is None:
+        gribs_dir = config.GRIBS_DIR
     if hours is None:
         hours = config.FORECAST_HORIZON_HOURS
 
-    file_paths = download_latest_forecast(paquet=paquet, path=path)
-    relevant = [fp for fp in sorted(file_paths) if _horizon_start(fp) < hours]
+    sp1_files = {_window_label(fp): fp for fp in download_latest_forecast("SP1", gribs_dir)}
+    ip1_files = {_window_label(fp): fp for fp in download_latest_forecast("IP1", gribs_dir)}
 
-    print(f"Reading {len(relevant)}/{len(file_paths)} files (horizon ≤ {hours}h)")
-    for fp in relevant:
-        yield Arome0025._read_multiple_gribs([Path(fp)], fields, 1)
+    windows = sorted(sp1_files.keys() & ip1_files.keys())
+    relevant = [w for w in windows if _window_start(sp1_files[w]) < hours]
 
-
-def get_latest_forecast(paquet: str, path: Path = None, fields=None) -> xarray.Dataset:
-    if path is None:
-        path = config.GRIBS_DIR
-    file_paths = download_latest_forecast(paquet=paquet, path=path)
-    return Arome0025._read_multiple_gribs([Path(fp) for fp in file_paths], fields, 4)
+    print(f"Processing {len(relevant)}/{len(windows)} windows (horizon ≤ {hours}h): {relevant}")
+    for window in relevant:
+        yield window, sp1_files[window], ip1_files[window]
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Download the latest Arome0025 forecast files from meteofetch."
     )
-    parser.add_argument("--paquet", default="SP1", help="Forecast paquet (e.g. SP1, IP1). Default: SP1.")
-    parser.add_argument("--path", type=Path, default=config.GRIBS_DIR, help="Directory to save GRIB files.")
+    parser.add_argument("--paquet", default="SP1", help="Paquet to download (e.g. SP1, IP1).")
+    parser.add_argument("--path", type=Path, default=config.GRIBS_DIR)
     args = parser.parse_args()
     download_latest_forecast(args.paquet, args.path)
 
