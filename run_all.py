@@ -3,16 +3,16 @@
 Main pipeline entry point.
 
 For each 6h GRIB window within the forecast horizon:
-  1. Load SP1 → render rain → free
-  2. Load IP1 (u,v) → render wind → free
-  3. Load IP1 (t,r) → render cloudbase → free
-  4. Update index.json
+  1. Download SP1 → render rain → delete SP1 file
+  2. Download IP1 → render wind → render cloudbase → delete IP1 file
+  3. Update index.json
 
-This keeps peak memory to a single 6h dataset at a time.
+At most two files exist on disk simultaneously (SP1 + IP1 for the current
+window), and each is deleted as soon as rendering is done.
 """
 
-import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import get_meteo_dataset
 import generate_index
@@ -32,23 +32,32 @@ def main():
 
     prev_tp = None  # carry rain accumulation across window boundaries
 
-    for window, sp1_file, ip1_file in get_meteo_dataset.iter_windows():
-        log(f"Window {window}")
+    for group, sp1_date, ip1_date in get_meteo_dataset.iter_windows():
+        log(f"Window {group}")
 
-        log("  Rain (SP1)...")
-        ds = get_meteo_dataset.read_file(sp1_file, fields=["tp"])
-        prev_tp = meteo_rain.render(ds, config.MAPS_DIR, prev_tp)
-        del ds
+        # --- Rain ---
+        sp1_file = get_meteo_dataset.download_window_file("SP1", group, sp1_date)
+        try:
+            ds = get_meteo_dataset.read_file(sp1_file, fields=["tp"])
+            prev_tp = meteo_rain.render(ds, config.MAPS_DIR, prev_tp)
+            del ds
+        finally:
+            sp1_file.unlink(missing_ok=True)
 
-        log("  Wind (IP1 u,v)...")
-        ds = get_meteo_dataset.read_file(ip1_file, fields=["u", "v"])
-        meteo_ip1.render_wind(ds, config.MAPS_DIR)
-        del ds
+        # --- Wind + Cloudbase (same IP1 file, read twice with different fields) ---
+        ip1_file = get_meteo_dataset.download_window_file("IP1", group, ip1_date)
+        try:
+            log("  Wind...")
+            ds = get_meteo_dataset.read_file(ip1_file, fields=["u", "v"])
+            meteo_ip1.render_wind(ds, config.MAPS_DIR)
+            del ds
 
-        log("  Cloudbase (IP1 t,r)...")
-        ds = get_meteo_dataset.read_file(ip1_file, fields=["t", "r"])
-        meteo_ip1.render_cloudbase(ds, config.MAPS_DIR)
-        del ds
+            log("  Cloudbase...")
+            ds = get_meteo_dataset.read_file(ip1_file, fields=["t", "r"])
+            meteo_ip1.render_cloudbase(ds, config.MAPS_DIR)
+            del ds
+        finally:
+            ip1_file.unlink(missing_ok=True)
 
         log("  Updating index.json...")
         generate_index.generate_index()
