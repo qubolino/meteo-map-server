@@ -105,6 +105,13 @@ def download_window_file(paquet: str, group: str, date_str: str, gribs_dir: Path
                 f.write(chunk)
 
     print(f"[{paquet}/{group}] Saved to {dest}")
+
+    # Remove stale files for the same paquet+group from a previous run
+    for stale in gribs_dir.glob(f"arome__0025__{paquet}__{group}__*.grib2"):
+        if stale != dest:
+            stale.unlink()
+            print(f"[{paquet}/{group}] Deleted stale: {stale.name}")
+
     return dest
 
 
