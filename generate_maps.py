@@ -20,7 +20,7 @@ import cartopy.feature as cfeature
 # Constants
 # =============================================================================
 
-DEFAULT_DPI = 300
+DEFAULT_DPI = 150
 DEFAULT_FIGSIZE = (8, 6)
 DEFAULT_MAP_EXTENT = (-10, 15, 38, 55)  # (xmin, xmax, ymin, ymax)
 

@@ -9,6 +9,8 @@ import generate_maps
 import get_meteo_dataset
 import config
 
+POOL_WORKERS = 2
+
 
 def _render(args):
     layer, maps_dir = args
@@ -31,7 +33,7 @@ def run(gribs_dir: Path, maps_dir: Path):
                 )
             )
 
-    with Pool() as pool:
+    with Pool(POOL_WORKERS) as pool:
         pool.map(_render, [(layer, maps_dir) for layer in layers])
 
 
