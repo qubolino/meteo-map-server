@@ -33,15 +33,12 @@ def cloudbase_height(t_kelvin, rel_humidity):
 
 
 def run(gribs_dir: Path, maps_dir: Path, pressure_levels: list = PRESSURE_LEVELS):
-    datasets = get_meteo_dataset.get_latest_forecast(
-        "IP1", gribs_dir, fields=["u", "v", "t", "r"]
-    )
+    # Two sequential reads to keep peak memory low on constrained hardware.
+    # u,v are released before t,r are loaded.
 
-    da_u = config.next_hours(datasets["u"])
-    da_v = config.next_hours(datasets["v"])
-    da_t = config.next_hours(datasets["t"])
-    da_r = config.next_hours(datasets["r"])
-
+    wind = get_meteo_dataset.get_latest_forecast("IP1", gribs_dir, fields=["u", "v"])
+    da_u = config.next_hours(wind["u"])
+    da_v = config.next_hours(wind["v"])
     n_times = len(da_u.coords["time"])
 
     for p in pressure_levels:
@@ -55,7 +52,13 @@ def run(gribs_dir: Path, maps_dir: Path, pressure_levels: list = PRESSURE_LEVELS
                 barb_length=4.0,
             )
 
-    for i in range(n_times):
+    del da_u, da_v, wind
+
+    cloud = get_meteo_dataset.get_latest_forecast("IP1", gribs_dir, fields=["t", "r"])
+    da_t = config.next_hours(cloud["t"])
+    da_r = config.next_hours(cloud["r"])
+
+    for i in range(len(da_t.coords["time"])):
         layer = cloudbase_height(
             da_t.isel(time=i).sel(isobaricInhPa=1000),
             da_r.isel(time=i).sel(isobaricInhPa=1000),
