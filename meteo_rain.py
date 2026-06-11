@@ -10,17 +10,14 @@ import config
 
 
 def run(gribs_dir: Path, maps_dir: Path):
-    datasets = get_meteo_dataset.get_latest_forecast("SP1", gribs_dir, fields=["tp"])
-    da = config.next_hours(datasets["tp"])
-
-    for i in range(len(da.coords["time"])):
-        if i == 0:
-            layer = da.isel(time=i)
-        else:
-            layer = (da.isel(time=i) - da.isel(time=i - 1)).assign_coords(
-                time=da.isel(time=i)["time"].values
-            )
-        generate_maps.plot_rain_layer_to_png(layer=layer, output_dir=maps_dir)
+    prev = None
+    for ds in get_meteo_dataset.iter_forecast("SP1", gribs_dir, fields=["tp"]):
+        da = config.next_hours(ds["tp"])
+        for i in range(len(da.coords["time"])):
+            current = da.isel(time=i)
+            layer = current if prev is None else (current - prev).assign_coords(time=current["time"].values)
+            generate_maps.plot_rain_layer_to_png(layer=layer, output_dir=maps_dir)
+            prev = current
 
 
 def main():

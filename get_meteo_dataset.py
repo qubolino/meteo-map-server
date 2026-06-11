@@ -13,6 +13,8 @@ import xarray
 
 import config
 
+xarray.set_options(use_new_combine_kwarg_defaults=True)
+
 
 def get_latest_reference_time(paquet: str) -> pd.Timestamp:
     return Arome0025.get_latest_forecast_time(paquet=paquet)
@@ -67,6 +69,34 @@ def download_latest_forecast(paquet: str, path: Path) -> list:
                 print(f"Could not delete {old_path}: {e}")
 
     return file_paths
+
+
+def _horizon_start(file_path: str) -> int:
+    """Parse the start hour from a filename like arome__0025__IP1__07H12H__....grib2."""
+    import re
+    m = re.search(r"__(\d+)H\d+H__", file_path)
+    return int(m.group(1)) if m else 0
+
+
+def iter_forecast(paquet: str, path: Path = None, fields=None, hours: int = None):
+    """
+    Yield one xarray.Dataset per GRIB file, in forecast-time order.
+
+    Files whose horizon range starts beyond *hours* are skipped entirely,
+    so we never load data we won't use. Each dataset is read, yielded, and
+    then discarded by the caller — keeping peak memory to one file at a time.
+    """
+    if path is None:
+        path = config.GRIBS_DIR
+    if hours is None:
+        hours = config.FORECAST_HORIZON_HOURS
+
+    file_paths = download_latest_forecast(paquet=paquet, path=path)
+    relevant = [fp for fp in sorted(file_paths) if _horizon_start(fp) < hours]
+
+    print(f"Reading {len(relevant)}/{len(file_paths)} files (horizon ≤ {hours}h)")
+    for fp in relevant:
+        yield Arome0025._read_multiple_gribs([Path(fp)], fields, 1)
 
 
 def get_latest_forecast(paquet: str, path: Path = None, fields=None) -> xarray.Dataset:
