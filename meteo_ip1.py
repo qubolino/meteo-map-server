@@ -2,7 +2,6 @@
 """Generate wind and cloudbase maps from the latest IP1 forecast (single GRIB read)."""
 
 import argparse
-from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +12,6 @@ import get_meteo_dataset
 import config
 
 PRESSURE_LEVELS = [1000, 900, 800, 700]
-POOL_WORKERS = 2
 
 CLOUDBASE_CMAP = LinearSegmentedColormap.from_list(
     "cloudbase",
@@ -34,29 +32,6 @@ def cloudbase_height(t_kelvin, rel_humidity):
     return 400 * (t_celsius - dewpoint)
 
 
-def _render_wind(args):
-    layer_u, layer_v, maps_dir = args
-    generate_maps.plot_wind_barbs_to_png(
-        layer_u, layer_v,
-        output_dir=maps_dir,
-        subsample=20,
-        barb_color="red",
-        barb_length=4.0,
-    )
-
-
-def _render_cloudbase(args):
-    layer, maps_dir = args
-    generate_maps.plot_layer_to_png(
-        layer,
-        output_path=maps_dir / f"cloudbase_map_{np.datetime_as_string(layer['time'].values, unit='s')}.png",
-        vmin=0,
-        vmax=4000,
-        levels=5,
-        cmap=CLOUDBASE_CMAP,
-    )
-
-
 def run(gribs_dir: Path, maps_dir: Path, pressure_levels: list = PRESSURE_LEVELS):
     datasets = get_meteo_dataset.get_latest_forecast(
         "IP1", gribs_dir, fields=["u", "v", "t", "r"]
@@ -69,24 +44,30 @@ def run(gribs_dir: Path, maps_dir: Path, pressure_levels: list = PRESSURE_LEVELS
 
     n_times = len(da_u.coords["time"])
 
-    wind_tasks = [
-        (da_u.isel(time=i).sel(isobaricInhPa=p),
-         da_v.isel(time=i).sel(isobaricInhPa=p),
-         maps_dir)
-        for p in pressure_levels
-        for i in range(n_times)
-    ]
+    for p in pressure_levels:
+        for i in range(n_times):
+            generate_maps.plot_wind_barbs_to_png(
+                da_u.isel(time=i).sel(isobaricInhPa=p),
+                da_v.isel(time=i).sel(isobaricInhPa=p),
+                output_dir=maps_dir,
+                subsample=20,
+                barb_color="red",
+                barb_length=4.0,
+            )
 
-    cloudbase_tasks = [
-        (cloudbase_height(da_t.isel(time=i).sel(isobaricInhPa=1000),
-                          da_r.isel(time=i).sel(isobaricInhPa=1000)),
-         maps_dir)
-        for i in range(n_times)
-    ]
-
-    with Pool(POOL_WORKERS) as pool:
-        pool.map(_render_wind, wind_tasks)
-        pool.map(_render_cloudbase, cloudbase_tasks)
+    for i in range(n_times):
+        layer = cloudbase_height(
+            da_t.isel(time=i).sel(isobaricInhPa=1000),
+            da_r.isel(time=i).sel(isobaricInhPa=1000),
+        )
+        generate_maps.plot_layer_to_png(
+            layer,
+            output_path=maps_dir / f"cloudbase_map_{np.datetime_as_string(layer['time'].values, unit='s')}.png",
+            vmin=0,
+            vmax=4000,
+            levels=5,
+            cmap=CLOUDBASE_CMAP,
+        )
 
 
 def main():
