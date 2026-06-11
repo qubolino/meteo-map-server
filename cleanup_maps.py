@@ -5,7 +5,7 @@ import argparse
 import glob
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import config
 
@@ -13,13 +13,13 @@ import config
 def extract_timestamp(filepath: str) -> datetime | None:
     match = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", filepath)
     if match:
-        return datetime.fromisoformat(match.group(1))
+        return datetime.fromisoformat(match.group(1)).replace(tzinfo=timezone.utc)
     return None
 
 
 def cleanup_files(directory: Path, pattern: str = "*.png", dry_run: bool = True) -> int:
     """Delete files whose embedded timestamp is in the past. Returns count deleted."""
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     deleted = 0
     for filepath in glob.glob(str(directory / pattern)):
         ts = extract_timestamp(filepath)

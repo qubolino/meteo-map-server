@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Wind and cloudbase map rendering from an IP1 xarray Dataset."""
 
+import time
 import xarray
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def render_wind(ds: xarray.Dataset, maps_dir: Path, pressure_levels: list = PRES
     da_v = config.next_hours(ds["v"])
     for i in range(len(da_u.coords["time"])):
         for p in pressure_levels:
+            t0 = time.perf_counter()
             generate_maps.plot_wind_barbs_to_png(
                 da_u.isel(time=i).sel(isobaricInhPa=p),
                 da_v.isel(time=i).sel(isobaricInhPa=p),
@@ -44,6 +46,7 @@ def render_wind(ds: xarray.Dataset, maps_dir: Path, pressure_levels: list = PRES
                 barb_color="red",
                 barb_length=4.0,
             )
+            print(f"    wind {da_u.isel(time=i)['time'].values} {p}hPa: {time.perf_counter()-t0:.1f}s", flush=True)
 
 
 def render_cloudbase(ds: xarray.Dataset, maps_dir: Path):
@@ -54,6 +57,7 @@ def render_cloudbase(ds: xarray.Dataset, maps_dir: Path):
             da_t.isel(time=i).sel(isobaricInhPa=1000),
             da_r.isel(time=i).sel(isobaricInhPa=1000),
         )
+        t0 = time.perf_counter()
         generate_maps.plot_layer_to_png(
             layer,
             output_path=maps_dir / f"cloudbase_map_{np.datetime_as_string(layer['time'].values, unit='s')}.png",
@@ -62,3 +66,4 @@ def render_cloudbase(ds: xarray.Dataset, maps_dir: Path):
             levels=5,
             cmap=CLOUDBASE_CMAP,
         )
+        print(f"    cloudbase {layer['time'].values}: {time.perf_counter()-t0:.1f}s", flush=True)
