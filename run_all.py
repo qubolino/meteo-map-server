@@ -2,21 +2,26 @@
 """
 Main pipeline entry point.
 
-For each 6h GRIB window within the forecast horizon:
+Each 6h GRIB window is processed in a dedicated child process (spawn) so that
+all GRIB/xarray memory is returned to the OS before the next window starts.
+
+For each window:
   1. Download SP1 (if not cached) → render rain
   2. Download IP1 (if not cached) → render wind → render cloudbase
   3. Update index.json
 """
 
+import multiprocessing
+import pickle
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 import time
 
 import get_meteo_dataset
 import generate_index
 import cleanup_maps
-import meteo_rain
-import meteo_ip1
 import config
 
 
@@ -29,51 +34,95 @@ def log(msg: str):
 def timed(label: str):
     t0 = time.perf_counter()
     yield
-    elapsed = time.perf_counter() - t0
-    log(f"  {label}: {elapsed:.1f}s")
+    log(f"  {label}: {time.perf_counter() - t0:.1f}s")
 
+
+# ---------------------------------------------------------------------------
+# Per-window work — runs in a child process
+# ---------------------------------------------------------------------------
+
+def _process_window(group: str, sp1_date: str, ip1_date: str,
+                    prev_tp_path: str | None, out_tp_path: str):
+    """Download and render one 6h window; hand off prev_tp via pickle files."""
+    import meteo_rain
+    import meteo_ip1
+
+    @contextmanager
+    def timed(label):
+        t0 = time.perf_counter()
+        yield
+        log(f"  {label}: {time.perf_counter() - t0:.1f}s")
+
+    prev_tp = None
+    if prev_tp_path and Path(prev_tp_path).exists():
+        with open(prev_tp_path, "rb") as f:
+            prev_tp = pickle.load(f)
+
+    with timed("download SP1"):
+        sp1_file = get_meteo_dataset.download_window_file("SP1", group, sp1_date)
+    with timed("read SP1"):
+        ds = get_meteo_dataset.read_file(sp1_file, fields=["tp"])
+    with timed("render rain"):
+        prev_tp = meteo_rain.render(ds, config.MAPS_DIR, prev_tp)
+    del ds
+
+    with open(out_tp_path, "wb") as f:
+        pickle.dump(prev_tp, f)
+    del prev_tp
+
+    with timed("download IP1"):
+        ip1_file = get_meteo_dataset.download_window_file("IP1", group, ip1_date)
+
+    with timed("read IP1 (u,v)"):
+        ds = get_meteo_dataset.read_file(ip1_file, fields=["u", "v"])
+    with timed("render wind"):
+        meteo_ip1.render_wind(ds, config.MAPS_DIR)
+    del ds
+
+    with timed("read IP1 (t,r)"):
+        ds = get_meteo_dataset.read_file(ip1_file, fields=["t", "r"])
+    with timed("render cloudbase"):
+        meteo_ip1.render_cloudbase(ds, config.MAPS_DIR)
+    del ds
+
+    with timed("update index"):
+        generate_index.generate_index()
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
 
 def main():
     log("Starting pipeline")
     total_t0 = time.perf_counter()
 
-    prev_tp = None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        prev_tp_path = None
 
-    for group, sp1_date, ip1_date in get_meteo_dataset.iter_windows():
-        log(f"── Window {group} ──")
+        for i, (group, sp1_date, ip1_date) in enumerate(get_meteo_dataset.iter_windows()):
+            log(f"── Window {group} ──")
+            out_tp_path = str(Path(tmpdir) / f"prev_tp_{i}.pkl")
 
-        with timed("download SP1"):
-            sp1_file = get_meteo_dataset.download_window_file("SP1", group, sp1_date)
-        with timed("read SP1"):
-            ds = get_meteo_dataset.read_file(sp1_file, fields=["tp"])
-        with timed("render rain"):
-            prev_tp = meteo_rain.render(ds, config.MAPS_DIR, prev_tp)
-        del ds
+            p = multiprocessing.Process(
+                target=_process_window,
+                args=(group, sp1_date, ip1_date, prev_tp_path, out_tp_path),
+            )
+            p.start()
+            p.join()
 
-        with timed("download IP1"):
-            ip1_file = get_meteo_dataset.download_window_file("IP1", group, ip1_date)
+            if p.exitcode != 0:
+                log(f"Window {group} failed (exit {p.exitcode}), aborting")
+                break
 
-        with timed("read IP1 (u,v)"):
-            ds = get_meteo_dataset.read_file(ip1_file, fields=["u", "v"])
-        with timed("render wind"):
-            meteo_ip1.render_wind(ds, config.MAPS_DIR)
-        del ds
-
-        with timed("read IP1 (t,r)"):
-            ds = get_meteo_dataset.read_file(ip1_file, fields=["t", "r"])
-        with timed("render cloudbase"):
-            meteo_ip1.render_cloudbase(ds, config.MAPS_DIR)
-        del ds
-
-        with timed("update index"):
-            generate_index.generate_index()
+            prev_tp_path = out_tp_path
 
     with timed("cleanup maps"):
         cleanup_maps.cleanup_files(config.MAPS_DIR, dry_run=False)
 
-    total = time.perf_counter() - total_t0
-    log(f"Pipeline complete in {total:.1f}s")
+    log(f"Pipeline complete in {time.perf_counter() - total_t0:.1f}s")
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn")
     main()
