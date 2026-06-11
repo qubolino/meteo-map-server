@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the full forecast pipeline: rain, wind, cloudbase, index, cleanup.
+# Run the full forecast pipeline.
+# Rain, wind, and cloudbase generation run in parallel; index and cleanup follow.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,14 +12,11 @@ cd "$SCRIPT_DIR"
 
 log "Starting meteo_france pipeline"
 
-log "Generating rain maps..."
-$PYTHON meteo_rain.py
-
-log "Generating wind maps..."
-$PYTHON meteo_wind.py
-
-log "Generating cloudbase maps..."
-$PYTHON meteo_cloudbase.py
+log "Generating maps (rain + wind + cloudbase in parallel)..."
+$PYTHON meteo_rain.py      &
+$PYTHON meteo_wind.py      &
+$PYTHON meteo_cloudbase.py &
+wait
 
 log "Writing index.json..."
 $PYTHON generate_index.py

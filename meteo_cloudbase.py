@@ -2,9 +2,12 @@
 """Generate cloud base height maps from the latest IP1 forecast."""
 
 import argparse
+from multiprocessing import Pool
 from pathlib import Path
+
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
+
 import generate_maps
 import get_meteo_dataset
 import config
@@ -13,7 +16,7 @@ CLOUDBASE_CMAP = LinearSegmentedColormap.from_list(
     "cloudbase",
     [
         (0.25, 0.25, 0.25, 0.75),  # dark gray  → low cloud base
-        (0.50, 0.50, 0.50, 0.75),  # mid gray
+        (0.50, 0.50, 0.50, 0.75),
         (0.75, 0.75, 0.75, 0.75),  # light gray
         (1.00, 1.00, 1.00, 0.00),  # transparent → high / clear
     ],
@@ -28,24 +31,32 @@ def cloudbase_height(t_kelvin, rel_humidity):
     return 400 * (t_celsius - dewpoint)
 
 
+def _render(args):
+    layer, maps_dir = args
+    generate_maps.plot_layer_to_png(
+        layer,
+        output_path=maps_dir / f"cloudbase_map_{np.datetime_as_string(layer['time'].values, unit='s')}.png",
+        vmin=0,
+        vmax=4000,
+        levels=5,
+        cmap=CLOUDBASE_CMAP,
+    )
+
+
 def run(gribs_dir: Path, maps_dir: Path):
     datasets = get_meteo_dataset.get_latest_forecast("IP1", gribs_dir, fields=["t", "r"])
-    da_t = datasets["t"]
-    da_r = datasets["r"]
+    da_t = config.next_hours(datasets["t"])
+    da_r = config.next_hours(datasets["r"])
 
-    for i in range(len(da_t.coords["time"])):
-        layer_t = da_t.isel(time=i).sel(isobaricInhPa=1000)
-        layer_r = da_r.isel(time=i).sel(isobaricInhPa=1000)
-        layer = cloudbase_height(layer_t, layer_r)
+    tasks = [
+        (cloudbase_height(da_t.isel(time=i).sel(isobaricInhPa=1000),
+                          da_r.isel(time=i).sel(isobaricInhPa=1000)),
+         maps_dir)
+        for i in range(len(da_t.coords["time"]))
+    ]
 
-        generate_maps.plot_layer_to_png(
-            layer,
-            output_path=maps_dir / f"cloudbase_map_{np.datetime_as_string(layer['time'].values, unit='s')}.png",
-            vmin=0,
-            vmax=4000,
-            levels=5,
-            cmap=CLOUDBASE_CMAP,
-        )
+    with Pool() as pool:
+        pool.map(_render, tasks)
 
 
 def main():

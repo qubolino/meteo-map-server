@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=pi
-WorkingDirectory=/opt/meteo_france
-ExecStart=/opt/meteo_france/run_all.sh
+WorkingDirectory=/opt/meteo-map-server
+ExecStart=/opt/meteo-map-server/run_all.sh
 StandardOutput=journal
 StandardError=journal
