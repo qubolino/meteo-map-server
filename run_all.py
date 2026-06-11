@@ -42,7 +42,8 @@ def timed(label: str):
 # ---------------------------------------------------------------------------
 
 def _process_window(group: str, sp1_date: str, ip1_date: str,
-                    prev_tp_path: str | None, out_tp_path: str):
+                    prev_tp_path: str | None, out_tp_path: str,
+                    reference_time: str | None = None):
     """Download and render one 6h window; hand off prev_tp via pickle files."""
     import meteo_rain
     import meteo_ip1
@@ -86,7 +87,7 @@ def _process_window(group: str, sp1_date: str, ip1_date: str,
     del ds
 
     with timed("update index"):
-        generate_index.generate_index()
+        generate_index.generate_index(reference_time=reference_time)
 
 
 # ---------------------------------------------------------------------------
@@ -104,9 +105,11 @@ def main():
             log(f"── Window {group} ──")
             out_tp_path = str(Path(tmpdir) / f"prev_tp_{i}.pkl")
 
+            ref_iso = f"{sp1_date}:00:00Z" if sp1_date else None
+
             p = multiprocessing.Process(
                 target=_process_window,
-                args=(group, sp1_date, ip1_date, prev_tp_path, out_tp_path),
+                args=(group, sp1_date, ip1_date, prev_tp_path, out_tp_path, ref_iso),
             )
             p.start()
             p.join()
