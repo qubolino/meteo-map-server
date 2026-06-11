@@ -39,8 +39,8 @@ def _render_wind_one(args):
     generate_maps.plot_wind_barbs_to_png(
         layer_u, layer_v,
         output_dir=maps_dir,
-        subsample=25,
-        barb_color="red",
+        subsample=30,
+        barb_color="#1a3a8a",
         barb_length=3.5,
     )
     print(f"    wind {layer_u['time'].values} {layer_u['isobaricInhPa'].values}hPa: {time.perf_counter()-t0:.1f}s", flush=True)
