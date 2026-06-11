@@ -93,6 +93,10 @@ def download_window_file(paquet: str, group: str, date_str: str, gribs_dir: Path
     filename = url.split("/")[-1].replace(":", "-")
     dest = gribs_dir / filename
 
+    if dest.exists():
+        print(f"[{paquet}/{group}] Already cached: {dest}")
+        return dest
+
     print(f"[{paquet}/{group}] Downloading...")
     with requests.get(url, stream=True, timeout=Arome0025.TIMEOUT) as r:
         r.raise_for_status()
