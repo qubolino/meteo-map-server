@@ -31,10 +31,8 @@ def render(ds: xarray.Dataset, maps_dir: Path, prev_tp=None, workers: int = conf
     layers = []
     for i in range(len(da.coords["time"])):
         current = da.isel(time=i)
-        layer = current if prev_tp is None else (current - prev_tp).assign_coords(
-            time=current["time"].values
-        )
-        layers.append(layer)
+        if prev_tp is not None:
+            layers.append((current - prev_tp).assign_coords(time=current["time"].values))
         prev_tp = current
 
     tasks = [(layer, maps_dir) for layer in layers]

@@ -275,7 +275,7 @@ def plot_wind_barbs_to_png(
     subsample: int = 5,
     show: bool = False,
     barb_color: str = "black",
-    barb_length: float = 7.0
+    barb_length: float = 3.5
 ):
     """
     Plot wind barbs from u and v wind components as a PNG.
@@ -317,7 +317,7 @@ def plot_wind_barbs_to_png(
         u_sub, v_sub,
         color=barb_color,
         length=barb_length,
-        linewidth=0.5,
+        linewidth=0.3,
         transform=ccrs.PlateCarree(),
     )
 

@@ -41,7 +41,7 @@ def _render_wind_one(args):
         output_dir=maps_dir,
         subsample=20,
         barb_color="red",
-        barb_length=4.0,
+        barb_length=3.5,
     )
     print(f"    wind {layer_u['time'].values} {layer_u['isobaricInhPa'].values}hPa: {time.perf_counter()-t0:.1f}s", flush=True)
 
