@@ -6,6 +6,8 @@ from multiprocessing import Pool
 import xarray
 from pathlib import Path
 
+import pandas as pd
+
 import generate_maps
 import config
 
@@ -25,7 +27,16 @@ def render(ds: xarray.Dataset, maps_dir: Path, prev_tp=None, workers: int = conf
     needed to compute the accumulation diff across the window boundary.
     Returns the last tp layer so the caller can pass it to the next window.
     """
-    da = config.next_hours(ds["tp"])
+    da_full = ds["tp"]
+    da = config.next_hours(da_full)
+
+    # If no baseline from a prior window, find the last step before now-1h in this GRIB
+    if prev_tp is None:
+        start = pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(hours=1)
+        times = pd.DatetimeIndex(da_full.coords["time"].values)
+        before = times[times < start]
+        if len(before) > 0:
+            prev_tp = da_full.isel(time=len(before) - 1)
 
     # Accumulation diff is sequential; compute all layers first
     layers = []
