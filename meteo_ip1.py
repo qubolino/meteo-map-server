@@ -39,7 +39,7 @@ def _render_wind_one(args):
     generate_maps.plot_wind_barbs_to_png(
         layer_u, layer_v,
         output_dir=maps_dir,
-        subsample=20,
+        subsample=25,
         barb_color="red",
         barb_length=3.5,
     )
