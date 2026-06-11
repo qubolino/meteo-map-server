@@ -20,13 +20,15 @@ LAYER_META = {
         "units": "mm/h",
         "vmin": 0.1,
         "vmax": 10.0,
-        "colors": ["#00B2E699", "#0000CC99", "#00CC0099", "#00CCCC99"],
+        # Qt color format: #AARRGGBB
+        "colors": ["#9900B2E6", "#990000CC", "#9900CC00", "#9900CCCC"],
     },
     "cloudbase": {
         "units": "m",
         "vmin": 0,
         "vmax": 4000,
-        "colors": ["#40404040", "#80808040", "#BFBFBF40", "#FFFFFF00"],
+        # Qt color format: #AARRGGBB
+        "colors": ["#40404040", "#40808080", "#40BFBFBF", "#00FFFFFF"],
     },
     "wind": {
         "units": "kt",
