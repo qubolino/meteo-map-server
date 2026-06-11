@@ -9,6 +9,7 @@ GRIBS_DIR = BASE_DIR / "gribs"
 MAPS_DIR = BASE_DIR / "generated_maps"
 
 FORECAST_HORIZON_HOURS = 10
+RENDER_WORKERS = 1  # set > 1 to render maps in parallel (uses multiprocessing)
 
 
 def next_hours(da, hours: int = FORECAST_HORIZON_HOURS):

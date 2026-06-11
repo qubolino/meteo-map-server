@@ -256,7 +256,7 @@ def plot_rain_layer_to_png(
     """
     plot_layer_to_png(
         layer=layer,
-        output_path=output_dir / f"rain_map_{np.datetime_as_string(layer['time'].values, unit='s')}.png",
+        output_path=output_dir / f"rain_map_{np.datetime_as_string(layer['time'].values, unit='s', timezone='UTC')}.png",
         dpi=dpi,
         show=show,
         cmap=create_rain_cmap(),
@@ -339,7 +339,7 @@ def plot_wind_barbs_to_png(
 
     # Save the plot
     save_figure(fig, 
-        output_dir / f"wind_map_{u_layer['isobaricInhPa'].values}hPa_{np.datetime_as_string(u_layer['time'].values, unit='s')}.png",
+        output_dir / f"wind_map_{u_layer['isobaricInhPa'].values}hPa_{np.datetime_as_string(u_layer['time'].values, unit='s', timezone='UTC')}.png",
         dpi=dpi,
         transparent=True
     )

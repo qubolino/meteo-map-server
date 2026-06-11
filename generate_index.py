@@ -8,7 +8,7 @@ from pathlib import Path
 import config
 
 FILENAME_RE = re.compile(
-    r"^(rain|cloudbase|wind)_map_[\d.hPa_T:-]+\.png$"
+    r"^(rain|cloudbase|wind)_map_[\d.hPa_T:Z-]+\.png$"
 )
 
 
