@@ -125,34 +125,6 @@ def read_file(file_path: str | Path, fields=None) -> xarray.Dataset:
 
 
 # ---------------------------------------------------------------------------
-# Window iterator
-# ---------------------------------------------------------------------------
-
-def iter_windows(gribs_dir: Path = None, hours: int = None):
-    """
-    Yield (group, sp1_date_str, ip1_date_str) for each relevant 6h window.
-
-    Reference times are resolved once at the start (with an API availability
-    check). The caller is responsible for downloading, processing, and deleting
-    each file before requesting the next window.
-    """
-    if gribs_dir is None:
-        gribs_dir = config.GRIBS_DIR
-
-    sp1_ref = get_latest_reference_time("SP1", gribs_dir)
-    ip1_ref = get_latest_reference_time("IP1", gribs_dir)
-
-    sp1_date = f"{sp1_ref:%Y-%m-%dT%H}"
-    ip1_date = f"{ip1_ref:%Y-%m-%dT%H}"
-
-    groups = _relevant_groups(hours)
-    print(f"Windows to process: {groups} (SP1 ref: {sp1_date}, IP1 ref: {ip1_date})")
-
-    for group in groups:
-        yield group, sp1_date, ip1_date
-
-
-# ---------------------------------------------------------------------------
 # CLI (download only, for debugging)
 # ---------------------------------------------------------------------------
 
