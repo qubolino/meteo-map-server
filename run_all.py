@@ -9,20 +9,30 @@ For each window:
   1. Download SP1 (if not cached) → render rain
   2. Download IP1 (if not cached) → render wind → render cloudbase
   3. Update index.json
+
+Safe to schedule every 15 minutes: an exclusive lockfile prevents overlapping
+runs, and the pipeline exits early if the latest model run hasn't changed.
 """
 
+import fcntl
 import multiprocessing
 import pickle
+import sys
 import tempfile
+import warnings
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import time
 
+warnings.filterwarnings("ignore", message="ecCodes", module="gribapi")
+
 import get_meteo_dataset
 import generate_index
 import cleanup_maps
 import config
+
+LOCK_FILE = config.MAPS_DIR / "pipeline.lock"
 
 
 def log(msg: str):
@@ -95,17 +105,52 @@ def _process_window(group: str, sp1_date: str, ip1_date: str,
 # ---------------------------------------------------------------------------
 
 def main():
+    config.MAPS_DIR.mkdir(parents=True, exist_ok=True)
+    lock_fh = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log("Another pipeline run is in progress — exiting.")
+        lock_fh.close()
+        sys.exit(0)
+
+    try:
+        _run()
+    finally:
+        fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        lock_fh.close()
+
+
+def _run():
     log("Starting pipeline")
     total_t0 = time.perf_counter()
+
+    # Skip if the latest model run hasn't changed since last time
+    sp1_cached = get_meteo_dataset._load_ref_cache(config.GRIBS_DIR, "SP1")
+    ip1_cached = get_meteo_dataset._load_ref_cache(config.GRIBS_DIR, "IP1")
+    sp1_ref = get_meteo_dataset.get_latest_reference_time("SP1")
+    ip1_ref = get_meteo_dataset.get_latest_reference_time("IP1")
+
+    sp1_date = f"{sp1_ref:%Y-%m-%dT%H}"
+    ip1_date = f"{ip1_ref:%Y-%m-%dT%H}"
+
+    if sp1_date == sp1_cached and ip1_date == ip1_cached:
+        log(f"No new model run (SP1: {sp1_date}, IP1: {ip1_date}) — exiting.")
+        return
+
+    log(f"New run detected — SP1: {sp1_date}, IP1: {ip1_date}")
+
+    groups = get_meteo_dataset._relevant_groups()
+    log(f"Windows to process: {groups}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         prev_tp_path = None
 
-        for i, (group, sp1_date, ip1_date) in enumerate(get_meteo_dataset.iter_windows()):
+        for i, group in enumerate(groups):
             log(f"── Window {group} ──")
             out_tp_path = str(Path(tmpdir) / f"prev_tp_{i}.pkl")
 
-            ref_iso = f"{sp1_date}:00:00Z" if sp1_date else None
+            ref_iso = f"{sp1_date}:00:00Z"
 
             p = multiprocessing.Process(
                 target=_process_window,
