@@ -128,6 +128,7 @@ def _run():
     # Skip if the latest model run hasn't changed since last time
     sp1_cached = get_meteo_dataset._load_ref_cache(config.GRIBS_DIR, "SP1")
     ip1_cached = get_meteo_dataset._load_ref_cache(config.GRIBS_DIR, "IP1")
+
     sp1_ref = get_meteo_dataset.get_latest_reference_time("SP1")
     ip1_ref = get_meteo_dataset.get_latest_reference_time("IP1")
 
