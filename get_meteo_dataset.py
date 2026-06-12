@@ -56,7 +56,7 @@ def _save_ref_cache(gribs_dir: Path, paquet: str, reference_time: str):
 
 
 def get_latest_reference_time(paquet: str, gribs_dir: Path = None) -> pd.Timestamp:
-    """Return the latest available reference time, caching the result."""
+    """Return the latest available reference time without updating the cache."""
     if gribs_dir is None:
         gribs_dir = config.GRIBS_DIR
 
@@ -64,7 +64,6 @@ def get_latest_reference_time(paquet: str, gribs_dir: Path = None) -> pd.Timesta
     if ref_time is None:
         raise ValueError(f"No forecasts available for paquet '{paquet}'.")
 
-    _save_ref_cache(gribs_dir, paquet, f"{ref_time:%Y-%m-%dT%H}")
     return ref_time
 
 

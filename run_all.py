@@ -162,12 +162,16 @@ def _run():
 
             if p.exitcode != 0:
                 log(f"Window {group} failed (exit {p.exitcode}), aborting")
-                break
+                return
 
             prev_tp_path = out_tp_path
 
     with timed("cleanup maps"):
         cleanup_maps.cleanup_files(config.MAPS_DIR, dry_run=False)
+
+    # Only persist the reference time after a fully successful run
+    get_meteo_dataset._save_ref_cache(config.GRIBS_DIR, "SP1", sp1_date)
+    get_meteo_dataset._save_ref_cache(config.GRIBS_DIR, "IP1", ip1_date)
 
     log(f"Pipeline complete in {time.perf_counter() - total_t0:.1f}s")
 
